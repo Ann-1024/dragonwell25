@@ -1,0 +1,108 @@
+#
+# Copyright (c) 2026, Alibaba Group Holding Limited. All rights reserved.
+#
+# This code is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License version 2 only, as
+# published by the Free Software Foundation.
+#
+
+name: 'Build (linux-riscv64 native)'
+
+on:
+  push:
+    branches:
+      - 'pr/**'
+  workflow_dispatch:
+    inputs:
+      make-target:
+        description: 'Make target to build'
+        required: true
+        default: 'hotspot'
+      configure-arguments:
+        description: 'Additional configure arguments'
+        required: false
+      make-arguments:
+        description: 'Additional make arguments'
+        required: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-riscv64:
+    name: build
+    runs-on: ubuntu-24.04-riscv
+
+    steps:
+      - name: 'Checkout the JDK source'
+        uses: actions/checkout@v6
+
+      - name: 'Show runner information'
+        run: |
+          set -euxo pipefail
+          uname -a
+          uname -m
+          cat /etc/os-release
+          nproc
+          df -h
+
+      - name: 'Install toolchain and dependencies'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            autoconf \
+            gcc \
+            g++ \
+            libasound2-dev \
+            libcups2-dev \
+            libfontconfig1-dev \
+            libfreetype6-dev \
+            libx11-dev \
+            libxext-dev \
+            libxrandr-dev \
+            libxrender-dev \
+            libxt-dev \
+            libxtst-dev \
+            make \
+            unzip \
+            wget \
+            zip
+
+      - name: 'Get the RISC-V BootJDK'
+        id: bootjdk
+        uses: ./.github/actions/get-bootjdk
+        with:
+          platform: linux-riscv64
+
+      - name: 'Get GTest'
+        id: gtest
+        uses: ./.github/actions/get-gtest
+
+      - name: 'Configure'
+        run: >
+          bash configure
+          --with-conf-name=linux-riscv64
+          --with-version-opt=${GITHUB_ACTOR}-${GITHUB_SHA}
+          --with-boot-jdk=${{ steps.bootjdk.outputs.path }}
+          --with-gtest=${{ steps.gtest.outputs.path }}
+          --with-zlib=system
+          --with-jmod-compress=zip-1
+          --enable-debug
+          --disable-precompiled-headers
+          ${{ github.event.inputs.configure-arguments }} || (
+          echo "Dumping config.log:" &&
+          cat config.log &&
+          exit 1)
+
+      - name: 'Build HotSpot'
+        run: >
+          make -k LOG=info
+          ${{ github.event.inputs.make-target || 'hotspot' }}
+          ${{ github.event.inputs.make-arguments }}
+
+      - name: 'Verify native RISC-V output'
+        run: |
+          set -euxo pipefail
+          test "$(uname -m)" = riscv64
+          find build \( -type f -name hotspot -o -name libjvm.so \) | head -20
