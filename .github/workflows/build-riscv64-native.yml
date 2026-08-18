@@ -17,7 +17,7 @@ on:
       make-target:
         description: 'Make target to build'
         required: true
-        default: 'hotspot'
+        default: 'product-bundles test-bundles'
       configure-arguments:
         description: 'Additional configure arguments'
         required: false
@@ -30,8 +30,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare:
+    name: prepare
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: 'Checkout the scripts'
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            .github
+            make/conf/github-actions.conf
+
+      - name: 'Build JTReg'
+        uses: ./.github/actions/build-jtreg
+
   build-riscv64:
     name: build
+    needs: prepare
     runs-on: ubuntu-24.04-riscv
 
     steps:
@@ -91,21 +107,37 @@ jobs:
           --with-gtest=${{ steps.gtest.outputs.path }}
           --with-zlib=system
           --with-jmod-compress=zip-1
-          --enable-debug
           --disable-precompiled-headers
           ${{ github.event.inputs.configure-arguments }} || (
           echo "Dumping config.log:" &&
           cat config.log &&
           exit 1)
 
-      - name: 'Build HotSpot'
+      - name: 'Build JDK'
         run: >
           make -k LOG=info
-          ${{ github.event.inputs.make-target || 'hotspot' }}
+          ${{ github.event.inputs.make-target || 'product-bundles test-bundles' }}
           ${{ github.event.inputs.make-arguments }}
+
+      - name: 'Upload bundles'
+        uses: ./.github/actions/upload-bundles
+        with:
+          platform: linux-riscv64
 
       - name: 'Verify native RISC-V output'
         run: |
           set -euxo pipefail
           test "$(uname -m)" = riscv64
           find build \( -type f -name hotspot -o -name libjvm.so \) | head -20
+
+  test-riscv64:
+    name: test
+    needs:
+      - prepare
+      - build-riscv64
+    uses: ./.github/workflows/test.yml
+    with:
+      platform: linux-riscv64
+      bootjdk-platform: linux-riscv64
+      runs-on: ubuntu-24.04-riscv
+      dry-run: false
