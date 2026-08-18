@@ -50,6 +50,9 @@ jobs:
       - name: 'Install toolchain and dependencies'
         run: |
           sudo apt-get update
+          # RISE images provide liboss4-salsa-asound2, which conflicts with
+          # the libasound2-dev headers required by the JDK build.
+          sudo apt-get remove -y liboss4-salsa-asound2 || true
           sudo apt-get install --no-install-recommends -y \
             autoconf \
             gcc \
