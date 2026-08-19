@@ -69,3 +69,53 @@ jobs:
           path: large-upload-test.bin
           compression-level: 0
           retention-days: 1
+
+  upload-v6-multifile-compressed:
+    name: upload-v6-multifile-compressed
+    needs: upload-v5
+    if: always()
+    runs-on: ubuntu-24.04-riscv
+    timeout-minutes: 30
+
+    steps:
+      - name: 'Create three bundle-shaped files'
+        run: |
+          set -euxo pipefail
+          mkdir bundle-test
+          dd if=/dev/urandom of=bundle-test/jdk-linux-riscv64.tar.gz bs=1M count=80 status=progress
+          dd if=/dev/urandom of=bundle-test/symbols-linux-riscv64.tar.gz bs=1M count=80 status=progress
+          dd if=/dev/urandom of=bundle-test/tests-linux-riscv64.tar.gz bs=1M count=80 status=progress
+          sha256sum bundle-test/*
+
+      - name: 'Upload three files with v6 and compression level 6'
+        uses: actions/upload-artifact@v6
+        with:
+          name: riscv-multifile-v6-compressed
+          path: bundle-test
+          compression-level: 6
+          retention-days: 1
+
+  upload-v6-multifile-uncompressed:
+    name: upload-v6-multifile-uncompressed
+    needs: upload-v6-multifile-compressed
+    if: always()
+    runs-on: ubuntu-24.04-riscv
+    timeout-minutes: 30
+
+    steps:
+      - name: 'Create three bundle-shaped files'
+        run: |
+          set -euxo pipefail
+          mkdir bundle-test
+          dd if=/dev/urandom of=bundle-test/jdk-linux-riscv64.tar.gz bs=1M count=80 status=progress
+          dd if=/dev/urandom of=bundle-test/symbols-linux-riscv64.tar.gz bs=1M count=80 status=progress
+          dd if=/dev/urandom of=bundle-test/tests-linux-riscv64.tar.gz bs=1M count=80 status=progress
+          sha256sum bundle-test/*
+
+      - name: 'Upload three files with v6 and compression level 0'
+        uses: actions/upload-artifact@v6
+        with:
+          name: riscv-multifile-v6-uncompressed
+          path: bundle-test
+          compression-level: 0
+          retention-days: 1
